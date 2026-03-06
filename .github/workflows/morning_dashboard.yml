@@ -4,7 +4,7 @@ on:
   schedule:
     # 03:30 UTC = 09:00 IST (UTC+5:30), Monday–Friday
     - cron: '30 3 * * 1-5'
-  workflow_dispatch:   # allows manual run from GitHub UI anytime
+  workflow_dispatch:   # manual run anytime
 
 jobs:
   run-dashboard:
@@ -35,13 +35,3 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python scripts/run_dashboard.py
-
-      - name: Upload images as artifacts (backup)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: dashboard-${{ github.run_id }}
-          path: |
-            dashboard_main.png
-            dashboard_breadth.png
-          retention-days: 7
