@@ -3,7 +3,7 @@ name: 🇮🇳 Morning Market Dashboard
 on:
   schedule:
     # 03:30 UTC = 09:00 IST (UTC+5:30), Monday–Friday
-    - cron: '30 3 * * 1-5'
+    - cron: '00 2 * * 1-5'
   workflow_dispatch:   # manual run anytime
 
 jobs:
