@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Morning Market Dashboard — Daily Runner (GitHub Actions)"""
+"""Morning Market Dashboard - Daily Runner (GitHub Actions)"""
 import os, sys, traceback, subprocess
 import requests as _req
 from datetime import datetime
@@ -9,26 +9,21 @@ CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID","")
 if not BOT_TOKEN or not CHAT_ID:
     print("TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID not set"); sys.exit(1)
 
-TG = f"https://api.telegram.org/bot{BOT_TOKEN}"
+TG = "https://api.telegram.org/bot" + BOT_TOKEN
 
 def tg_msg(text):
-    _req.post(f"{TG}/sendMessage",
+    _req.post(TG + "/sendMessage",
               data={"chat_id":CHAT_ID,"text":text,"parse_mode":"HTML"}, timeout=15)
 
 def tg_document(path, caption=""):
-    """Send as document — Telegram never compresses documents."""
     with open(path,"rb") as f:
-        _req.post(f"{TG}/sendDocument",
+        _req.post(TG + "/sendDocument",
                   data={"chat_id":CHAT_ID,"caption":caption,"parse_mode":"HTML"},
                   files={"document":f}, timeout=90)
 
-print("="*55)
-print(f"  MORNING DASHBOARD  {datetime.now().strftime('%a %d %b %Y  %H:%M UTC')}")
-print("="*55)
-
-# Install Playwright browsers
-subprocess.run([sys.executable,"-m","playwright","install","chromium","--with-deps"],
-               capture_output=True)
+print("=" * 55)
+print("  MORNING DASHBOARD  " + datetime.now().strftime("%a %d %b %Y  %H:%M UTC"))
+print("=" * 55)
 
 run_ok  = False
 verdict = None
@@ -36,7 +31,7 @@ try:
     import matplotlib; matplotlib.use("Agg")
     import nest_asyncio; nest_asyncio.apply()
 
-    # ── CELL 2 ────────────────────────────────────
+    # -- CELL 2 --
     # ── CELL 2: Imports & Config ─────────────────────────────────────────────────
     import yfinance as yf
     import pandas as pd
@@ -162,7 +157,7 @@ try:
     print(f'✅ Config ready  |  {START.date()} → {END.date()}')
     
 
-    # ── CELL 3 ────────────────────────────────────
+    # -- CELL 3 --
     # ── CELL 3: STEP 1 — Index & VIX Closes ─────────────────────────────────────
     print('STEP 1: Fetching index closes...')
     closes = {}
@@ -195,7 +190,7 @@ try:
     print(f'\n✅ STEP 1 COMPLETE  |  Last trading day: {last_date.date()}')
     
 
-    # ── CELL 4 ────────────────────────────────────
+    # -- CELL 4 --
     # ── CELL 4: STEP 2 — Dynamic Stock Universe from NSE Archives ────────────────
     #
     # NSE publishes constituent CSVs at nsearchives.nseindia.com.
@@ -260,7 +255,7 @@ try:
     print(f'\n✅ STEP 2 COMPLETE')
     
 
-    # ── CELL 5 ────────────────────────────────────
+    # -- CELL 5 --
     # ── CELL 5: STEP 3 — Fetch Stock Prices ─────────────────────────────────────
     print(f'STEP 3: Fetching prices for {len(ALL_TICKERS)} stocks (~90-120 sec)...\n')
     stock_data = {}
@@ -283,14 +278,12 @@ try:
     print('\n✅ STEP 3 COMPLETE')
     
 
-    # ── CELL 6 ────────────────────────────────────
-    # ── CELL 6: STEP 4 — FII / DII Data ───────────────────────
-    # Playwright (async, via nest_asyncio) renders the full JS page.
-    # Fallback: manual input — paste values from
-    # trendlyne.com/macro-data/fii-dii/latest/snapshot-pastmonth/
+    # -- CELL 6 --
+    # ── CELL 6: STEP 4 — FII / DII Data ─────────────────────────────────────────
+    # Playwright renders Trendlyne JS to get FII equity net flow (3 rolling windows)
     print('STEP 4: Fetching FII/DII data...\n')
     import asyncio, nest_asyncio
-    nest_asyncio.apply()  # lets asyncio run inside Colab's existing event loop
+    nest_asyncio.apply()
     from playwright.async_api import async_playwright
     
     def to_f(val):
@@ -301,22 +294,26 @@ try:
         d5  = v5  / 5
         d10 = (v10 - v5)  / 5
         d20 = (v20 - v10) / 10
-        return pd.Series([d5]*5 + [d10]*5 + [d20]*10, dtype=float)
+        return __import__('pandas').Series([d5]*5 + [d10]*5 + [d20]*10, dtype=float)
     
     async def _playwright_fetch():
         url = 'https://trendlyne.com/macro-data/fii-dii/latest/snapshot-pastmonth/'
         async with async_playwright() as pw:
-            browser = await pw.chromium.launch(headless=True, args=['--no-sandbox','--disable-setuid-sandbox'])
-            page    = await browser.new_page(user_agent=(
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36'
+            browser = await pw.chromium.launch(
+                headless=True,
+                args=['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage']
+            )
+            page = await browser.new_page(user_agent=(
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
             ))
             await page.goto(url, wait_until='networkidle', timeout=60000)
             try:
                 await page.wait_for_selector('text=Last 30 Days', timeout=25000)
-                print('    Summary rows visible ✅')
+                print('  Summary rows visible ✅')
             except:
-                print('    Timeout — extracting whatever rendered')
-            rows    = await page.query_selector_all('table tr')
+                print('  Timeout waiting for rows — extracting whatever rendered')
+            rows = await page.query_selector_all('table tr')
             results = {}
             period_map = {'last 30 days':'20d', 'last 2 weeks':'10d', 'last 1 week':'5d'}
             for row in rows:
@@ -326,62 +323,45 @@ try:
                 if not texts: continue
                 for ps, label in period_map.items():
                     if ps in texts[0].lower():
-                        print(f'    {label}: {texts[:5]}')
                         val = to_f(texts[1]) if len(texts) >= 2 else None
-                        if val is not None: results[label] = val
+                        if val is not None:
+                            results[label] = val
+                            print(f'  {label}: {texts}')
                         break
             await browser.close()
         return results
     
     def fetch_playwright():
-        print('    Launching headless Chromium...')
         results = asyncio.get_event_loop().run_until_complete(_playwright_fetch())
-        print(f'    Periods found: {results}')
-        if len(results) < 2: raise ValueError(f'Only {len(results)} rows: {results}')
-        v5, v10, v20 = results.get('5d',0), results.get('10d',0), results.get('20d',0)
-        print(f'    5d:{v5:+,.1f}  10d:{v10:+,.1f}  20d:{v20:+,.1f} Cr')
-        return build_series(v5,v10,v20), f'Trendlyne Playwright (5d:{v5:+,.0f}/10d:{v10:+,.0f}/20d:{v20:+,.0f})'
-    
-    def fetch_manual():
-        print('  ── Manual input — open this URL in your browser:')
-        print('  https://trendlyne.com/macro-data/fii-dii/latest/snapshot-pastmonth/')
-        print('  Look at the SUMMARY tab, FII EQUITY column. Enter 0 if data is unavailable.')
-        print()
-        try:
-            v20 = float(input('  Last 30 Days  FII Equity (e.g. 12253 or -5432): ').replace(',',''))
-            v10 = float(input('  Last 2 Weeks  FII Equity (e.g. -829):           ').replace(',',''))
-            v5  = float(input('  Last 1 Week   FII Equity (e.g. -10885):         ').replace(',',''))
-        except Exception as e:
-            raise ValueError(f'Invalid input: {e}')
-        print(f'\n    Got: 5d:{v5:+,.1f}  10d:{v10:+,.1f}  20d:{v20:+,.1f} Cr')
-        return build_series(v5,v10,v20), f'Manual input (5d:{v5:+,.0f}/10d:{v10:+,.0f}/20d:{v20:+,.0f})'
+        if len(results) < 2:
+            raise ValueError(f'Only {len(results)} rows found: {results}')
+        v5  = results.get('5d',  0)
+        v10 = results.get('10d', 0)
+        v20 = results.get('20d', 0)
+        net = build_series(v5, v10, v20)
+        desc = f'Trendlyne (5d:{v5:+,.0f} / 10d:{v10:+,.0f} / 20d:{v20:+,.0f} Cr)'
+        return net, desc
     
     def fetch_fii_validated():
-        for label, fn in [('Trendlyne Playwright', fetch_playwright),
-                          ('Manual input',         fetch_manual)]:
-            print(f'\n  ── Trying {label} ──')
-            try:
-                net, desc = fn()
-                n5,n10,n20 = float(net.head(5).sum()),float(net.head(10).sum()),float(net.head(20).sum())
-                if len(net) >= 20 and not (n5==n10==n20):
-                    print(f'  ✅ PASSED | 5d:{n5:+,.0f}  10d:{n10:+,.0f}  20d:{n20:+,.0f} Cr')
-                    return net, desc
-                print(f'  ❌ Validation failed')
-            except KeyboardInterrupt:
-                print('  Skipped.')
-                break
-            except Exception as e:
-                import traceback
-                print(f'  ❌ {label} ERROR: {e}')
-                for ln in traceback.format_exc().strip().splitlines()[-4:]:
-                    print(f'     {ln}')
-        print('\n  ⚠️  FII data unavailable — indicator shows NEUTRAL.')
+        print('  Trying Playwright / Trendlyne...')
+        try:
+            net, desc = fetch_playwright()
+            n5  = float(net.head(5).sum())
+            n10 = float(net.head(10).sum())
+            n20 = float(net.head(20).sum())
+            print(f'  ✅ PASSED | 5d:{n5:+,.0f}  10d:{n10:+,.0f}  20d:{n20:+,.0f} Cr')
+            return net, desc
+        except Exception as e:
+            import traceback
+            print(f'  ❌ Playwright failed: {e}')
+            traceback.print_exc()
+        print('  ⚠️  FII unavailable — dashboard continues without it.')
         return None, None
     
     fii_net_series, fii_source_label = fetch_fii_validated()
     print(f'\n✅ STEP 4 COMPLETE  |  Source: {fii_source_label or "none — NEUTRAL"}')
 
-    # ── CELL 7 ────────────────────────────────────
+    # -- CELL 7 --
     # ── CELL 7: STEP 5 — Compute Indicators ─────────────────────────────────────
     
     def sma(s,w): return s.rolling(window=w,min_periods=w).mean()
@@ -526,7 +506,7 @@ try:
     print('\n✅ STEP 5 COMPLETE')
     
 
-    # ── CELL 8 ────────────────────────────────────
+    # -- CELL 8 --
     # ── CELL 8: STEP 6 — Main Dashboard Chart ────────────────────────────────────
     
     def compute_verdict(indicators):
@@ -663,7 +643,7 @@ try:
     verdict = plot_main_dashboard()
     
 
-    # ── CELL 9 ────────────────────────────────────
+    # -- CELL 9 --
     # ── CELL 9: STEP 7 — Breadth Deep-Dive Chart ─────────────────────────────────
     def bar_color(p):
         return C['BULLISH'] if p>=60 else(C['NEUTRAL'] if p>=40 else C['BEARISH'])
@@ -718,7 +698,7 @@ try:
     plot_breadth_dashboard()
     
 
-    # ── CELL 10 ────────────────────────────────────
+    # -- CELL 10 --
     # ── CELL 10: Build PDF Report (3 pages) ────────────────────────────────
     # Page 1: Text summary  |  Page 2: Main chart  |  Page 3: Breadth
     from matplotlib.backends.backend_pdf import PdfPages
@@ -841,42 +821,48 @@ try:
         print(f'\U0001f4e5 Download started: {PDF_FILE}')
     except ImportError:
         print(f'(Not in Colab — file saved locally as {PDF_FILE})')
-
     run_ok = True
-    print("\n✅  All cells completed.")
+    print("\n[OK] All cells completed.")
 
 except Exception as e:
-    print(f"\n❌  Run failed: {e}"); traceback.print_exc()
+    print("\n[FAIL] Run failed: " + str(e)); traceback.print_exc()
 
 today = datetime.now().strftime("%A, %d %b %Y")
 
 if run_ok and os.path.exists("dashboard_report.pdf"):
     try:
-        sigs = {"BULLISH":"🟢","NEUTRAL":"🟡","BEARISH":"🔴"}
-        ind_ln = "".join(f"  {sigs[i['signal']]} {i['name']}\n" for i in INDICATORS)
+        sig_map = {"BULLISH":"[BULL]","NEUTRAL":"[NEUT]","BEARISH":"[BEAR]"}
+        ind_ln = "".join("  " + sig_map[i["signal"]] + " " + i["name"] + "\n" for i in INDICATORS)
         fii_ln = ""
         if fii_net_series is not None:
             n5,n10,n20 = (float(fii_net_series.head(k).sum()) for k in (5,10,20))
-            fii_ln = f"\n<b>FII:</b>  5d Rs{n5:+,.0f}  10d Rs{n10:+,.0f}  20d Rs{n20:+,.0f} Cr"
-        msg = (
-            f"🇮🇳 <b>Morning Dashboard — {today}</b>\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"<b>Score:</b> {verdict['score']:.1f}/10  <b>Verdict:</b> {verdict['verdict']}{fii_ln}\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"{ind_ln}"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"Universe: {len(ALL_TICKERS)} stocks"
+            fii_ln = "\n<b>FII:</b>  5d Rs" + f"{n5:+,.0f}" + "  10d Rs" + f"{n10:+,.0f}" + "  20d Rs" + f"{n20:+,.0f}" + " Cr"
+        else:
+            fii_ln = "\n<b>FII:</b>  unavailable (check trendlyne.com manually)"
+        sc   = str(round(verdict["score"],1))
+        verd = verdict["verdict"]
+        msg  = (
+            "<b>Morning Dashboard - " + today + "</b>\n"
+            + "-"*30 + "\n"
+            + "<b>Score:</b> " + sc + "/10  <b>Verdict:</b> " + verd + fii_ln + "\n"
+            + "-"*30 + "\n"
+            + ind_ln
+            + "-"*30 + "\n"
+            + "Universe: " + str(len(ALL_TICKERS)) + " stocks"
         )
     except Exception as e:
-        msg = f"🇮🇳 <b>Morning Dashboard — {today}</b>\nComplete. PDF attached."; print(e)
+        msg = "<b>Morning Dashboard - " + today + "</b>\nComplete. PDF attached."; print(e)
 
+    print("[SEND] Text message to Telegram...")
     tg_msg(msg)
     sz = os.path.getsize("dashboard_report.pdf") // 1024
+    print("[SEND] PDF (" + str(sz) + " KB) via sendDocument...")
     tg_document("dashboard_report.pdf",
-                f"📊 Full Report — {today} · 3 pages · {sz} KB")
-    print("✅  Sent to Telegram.")
+                "Full Report - " + today + " - 3 pages - " + str(sz) + " KB")
+    print("[OK] Sent: 1 text + 1 PDF.")
 else:
     err = "Run failed" if not run_ok else "PDF not generated"
-    tg_msg(f"⚠️ <b>Morning Dashboard — {today}</b>\n{err}. Check Actions logs.")
+    print("[WARN] " + err + " - sending error notification.")
+    tg_msg("<b>Morning Dashboard - " + today + "</b>\n" + err + ". Check Actions logs.")
 
-print("\n✅  Done.")
+print("\n[DONE]")
