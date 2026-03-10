@@ -2,9 +2,10 @@ name: 🇮🇳 Morning Market Dashboard
 
 on:
   schedule:
-    # 03:30 UTC = 09:00 IST (UTC+5:30), Monday–Friday
-    - cron: '00 2 * * 1-5'
-  workflow_dispatch:   # manual run anytime
+    # 22:30 UTC Sun–Thu = 04:00 IST Mon–Fri
+    # Even with 2hr GitHub delay → delivered by 06:00 IST
+    - cron: '30 22 * * 0-4'
+  workflow_dispatch:
 
 jobs:
   run-dashboard:
@@ -29,6 +30,9 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r requirements.txt -q
+
+      - name: Install Playwright browsers
+        run: python -m playwright install chromium --with-deps
 
       - name: Run dashboard
         env:
