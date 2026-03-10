@@ -280,21 +280,21 @@ try:
 
     # -- CELL 6 --
     # ── CELL 6: STEP 4 — FII / DII Data ─────────────────────────────────────────
-    # Playwright renders Trendlyne JS to get FII equity net flow (3 rolling windows)
     print('STEP 4: Fetching FII/DII data...\n')
     import asyncio, nest_asyncio
     nest_asyncio.apply()
     from playwright.async_api import async_playwright
+    import pandas as _pd
     
     def to_f(val):
-        try: return float(str(val).replace(',','').replace('–','-').replace('−','-').strip())
+        try: return float(str(val).replace(',','').replace('\u2013','-').replace('\u2212','-').strip())
         except: return None
     
     def build_series(v5, v10, v20):
         d5  = v5  / 5
         d10 = (v10 - v5)  / 5
         d20 = (v20 - v10) / 10
-        return __import__('pandas').Series([d5]*5 + [d10]*5 + [d20]*10, dtype=float)
+        return _pd.Series([d5]*5 + [d10]*5 + [d20]*10, dtype=float)
     
     async def _playwright_fetch():
         url = 'https://trendlyne.com/macro-data/fii-dii/latest/snapshot-pastmonth/'
@@ -308,58 +308,45 @@ try:
                 'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
             ))
             await page.goto(url, wait_until='networkidle', timeout=60000)
-            try:
-                await page.wait_for_selector('text=Last 30 Days', timeout=25000)
-                print('  Summary rows visible ✅')
-            except:
-                print('  Timeout waiting for rows — extracting whatever rendered')
+    
+            # ── DIAGNOSTIC: dump ALL table rows so we can see current page structure ──
+            print('  ── PAGE DIAGNOSTIC ──')
             rows = await page.query_selector_all('table tr')
-            results = {}
-            period_map = {'last 30 days':'20d', 'last 2 weeks':'10d', 'last 1 week':'5d'}
-            for row in rows:
+            print(f'  Total <tr> found: {len(rows)}')
+            for idx, row in enumerate(rows[:40]):
                 cells = await row.query_selector_all('td, th')
-                texts = [await c.inner_text() for c in cells]
-                texts = [t.strip() for t in texts]
-                if not texts: continue
-                for ps, label in period_map.items():
-                    if ps in texts[0].lower():
-                        val = to_f(texts[1]) if len(texts) >= 2 else None
-                        if val is not None:
-                            results[label] = val
-                            print(f'  {label}: {texts}')
-                        break
+                texts = [t.strip() for t in [await c.inner_text() for c in cells] if t.strip()]
+                if texts:
+                    print(f'  row[{idx:02d}]: {texts[:6]}')
+    
+            # ── Also dump any text containing "week" or "days" anywhere on page ──
+            print('\n  ── KEYWORD SCAN (week/days/fii/equity) ──')
+            body = await page.inner_text('body')
+            for line in body.split('\n'):
+                l = line.strip()
+                if l and any(k in l.lower() for k in ['week','days','30 day','fii equity','net equity']):
+                    print(f'  >> {l[:120]}')
+    
             await browser.close()
-        return results
+            return {}   # diagnostic only — returns empty so fetch fails gracefully
     
     def fetch_playwright():
         results = asyncio.get_event_loop().run_until_complete(_playwright_fetch())
         if len(results) < 2:
-            raise ValueError(f'Only {len(results)} rows found: {results}')
-        v5  = results.get('5d',  0)
-        v10 = results.get('10d', 0)
-        v20 = results.get('20d', 0)
-        net = build_series(v5, v10, v20)
-        desc = f'Trendlyne (5d:{v5:+,.0f} / 10d:{v10:+,.0f} / 20d:{v20:+,.0f} Cr)'
-        return net, desc
+            raise ValueError(f'Diagnostic run — check log for page structure')
+        return None, None
     
     def fetch_fii_validated():
-        print('  Trying Playwright / Trendlyne...')
+        print('  Running Playwright diagnostic...')
         try:
-            net, desc = fetch_playwright()
-            n5  = float(net.head(5).sum())
-            n10 = float(net.head(10).sum())
-            n20 = float(net.head(20).sum())
-            print(f'  ✅ PASSED | 5d:{n5:+,.0f}  10d:{n10:+,.0f}  20d:{n20:+,.0f} Cr')
-            return net, desc
+            fetch_playwright()
         except Exception as e:
-            import traceback
-            print(f'  ❌ Playwright failed: {e}')
-            traceback.print_exc()
-        print('  ⚠️  FII unavailable — dashboard continues without it.')
+            print(f'  (diagnostic exception: {e})')
+        print('  ⚠️  FII in diagnostic mode — check log above for page structure.')
         return None, None
     
     fii_net_series, fii_source_label = fetch_fii_validated()
-    print(f'\n✅ STEP 4 COMPLETE  |  Source: {fii_source_label or "none — NEUTRAL"}')
+    print(f'\n✅ STEP 4 COMPLETE (diagnostic mode)')
 
     # -- CELL 7 --
     # ── CELL 7: STEP 5 — Compute Indicators ─────────────────────────────────────
