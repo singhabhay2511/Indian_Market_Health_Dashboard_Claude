@@ -309,40 +309,48 @@ try:
             ))
             await page.goto(url, wait_until='networkidle', timeout=60000)
     
-            # ── DIAGNOSTIC: dump ALL table rows so we can see current page structure ──
-            print('  ── PAGE DIAGNOSTIC ──')
-            rows = await page.query_selector_all('table tr')
-            print(f'  Total <tr> found: {len(rows)}')
-            for idx, row in enumerate(rows[:40]):
-                cells = await row.query_selector_all('td, th')
-                texts = [t.strip() for t in [await c.inner_text() for c in cells] if t.strip()]
-                if texts:
-                    print(f'  row[{idx:02d}]: {texts[:6]}')
-    
-            # ── Also dump any text containing "week" or "days" anywhere on page ──
-            print('\n  ── KEYWORD SCAN (week/days/fii/equity) ──')
+            html = await page.content()
             body = await page.inner_text('body')
+            print(f'  Page HTML length : {len(html):,} chars')
+            print(f'  Page body text   : {len(body):,} chars')
+    
+            # Check iframes
+            frames = page.frames
+            print(f'  Frames count     : {len(frames)}')
+            for fi, fr in enumerate(frames):
+                print(f'    frame[{fi}] url: {fr.url[:80]}')
+    
+            # Table rows
+            rows = await page.query_selector_all('table tr')
+            print(f'  <table tr> count : {len(rows)}')
+    
+            # Try div-based structures
+            for selector in ['[class*="table"]','[class*="row"]','[class*="summary"]',
+                             '[class*="fii"]','[class*="net"]','tbody','thead']:
+                els = await page.query_selector_all(selector)
+                if els: print(f'  {selector:30s}: {len(els)} elements')
+    
+            # Keyword scan on body text
+            print('\n  ── KEYWORD SCAN ──')
             for line in body.split('\n'):
                 l = line.strip()
-                if l and any(k in l.lower() for k in ['week','days','30 day','fii equity','net equity']):
+                if l and any(k in l.lower() for k in ['week','30 day','last 1','last 2','fii equity','net equity','net flow']):
                     print(f'  >> {l[:120]}')
     
-            await browser.close()
-            return {}   # diagnostic only — returns empty so fetch fails gracefully
+            # Print first 3000 chars of body text to see structure
+            print('\n  ── BODY TEXT (first 3000 chars) ──')
+            print(body[:3000])
     
-    def fetch_playwright():
-        results = asyncio.get_event_loop().run_until_complete(_playwright_fetch())
-        if len(results) < 2:
-            raise ValueError(f'Diagnostic run — check log for page structure')
-        return None, None
+            await browser.close()
+            return {}
     
     def fetch_fii_validated():
         print('  Running Playwright diagnostic...')
         try:
-            fetch_playwright()
+            asyncio.get_event_loop().run_until_complete(_playwright_fetch())
         except Exception as e:
-            print(f'  (diagnostic exception: {e})')
-        print('  ⚠️  FII in diagnostic mode — check log above for page structure.')
+            import traceback; traceback.print_exc()
+        print('  ⚠️  FII in diagnostic mode.')
         return None, None
     
     fii_net_series, fii_source_label = fetch_fii_validated()
